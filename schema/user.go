@@ -12,7 +12,7 @@ func NewUser(addr string) *User {
 	return &User{
 		id:   addr,
 		name: addr,
-		msg:  make(chan string),
+		msg:  make(chan string, 10),
 	}
 }
 
@@ -29,4 +29,9 @@ func (u *User) GetUserName() string {
 // 獲取user msg
 func (u *User) GetUserMsg() chan string {
 	return u.msg
+}
+
+// 變更 user msg
+func (u *User) SetUserMsg(msg string) {
+	u.msg <- msg
 }
