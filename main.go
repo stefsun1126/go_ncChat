@@ -25,6 +25,7 @@ func main() {
 		fmt.Println("接收新連線!")
 		if err != nil {
 			fmt.Printf("server.Accept() err : %v\n", err)
+			return
 		}
 		go handleConnection(conn)
 	}
@@ -47,6 +48,7 @@ func handleConnection(conn net.Conn) {
 		len, err := conn.Read(buffer)
 		if err != nil {
 			fmt.Printf("conn.Read() err : %v\n", err)
+			return
 		}
 		// 打印 -1是因為 nc傳過來會有個換行
 		fmt.Printf("獲取到的訊息是: %v\n", string(buffer[:len-1]))
