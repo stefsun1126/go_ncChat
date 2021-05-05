@@ -3,7 +3,12 @@ package main
 import (
 	"fmt"
 	"net"
+
+	schema "./schema"
 )
+
+// 全局map紀錄所有用戶
+var allUser = make(map[string]*schema.User)
 
 func main() {
 
@@ -29,6 +34,13 @@ func main() {
 func handleConnection(conn net.Conn) {
 	// 一個連接會有多次發送
 	for {
+		// 建立用戶資料
+		addr := conn.RemoteAddr().String()
+		currentUser := schema.NewUser(addr)
+
+		// 將此用戶加入所有用戶map
+		allUser[currentUser.GetUserId()] = currentUser
+
 		// 用來接收獲取到的訊息
 		buffer := make([]byte, 2048)
 		// 讀取連接
