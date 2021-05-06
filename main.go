@@ -15,7 +15,6 @@ var allUser = make(map[string]*schema.User)
 var allMsg = make(chan string)
 
 func main() {
-
 	// 創建服務器
 	server, err := net.Listen("tcp", ":8080")
 	if err != nil {
@@ -48,6 +47,12 @@ func handleConnection(conn net.Conn) {
 	// 將此用戶加入所有用戶map
 	allUser[currentUser.GetUserId()] = currentUser
 
+	// 退出信號管道
+	isQuit := make(chan bool)
+
+	// 監聽用戶退出信號
+	go listenIsQuit(isQuit, currentUser, conn)
+
 	// 監聽將用戶的管道的訊息寫到終端
 	go writeToWindows(currentUser, conn)
 
@@ -56,36 +61,45 @@ func handleConnection(conn net.Conn) {
 	allMsg <- loginInfo
 
 	// 一個連接會有多次發送
-	for {
-
-		// 用來接收獲取到的訊息
-		buffer := make([]byte, 2048)
-		// 讀取連接
-		lenBuffer, err := conn.Read(buffer)
-		if err != nil {
-			fmt.Printf("conn.Read() err : %v\n", err)
-			return
-		}
-		// 打印 -1是因為 nc傳過來會有個換行
-		userInput := string(buffer[:lenBuffer-1])
-		// 輸入who列出當前所有在線使用者
-		if userInput == "\\who" {
-			var users []string
-			for _, user := range allUser {
-				users = append(users, fmt.Sprintf("userId:%v name:%v\n", user.GetUserId(), user.GetUserName()))
+	func() {
+		defer func() {
+			close(isQuit)
+		}()
+		for {
+			// 用來接收獲取到的訊息
+			buffer := make([]byte, 2048)
+			// 讀取連接
+			lenBuffer, err := conn.Read(buffer)
+			// 沒有長度代表客戶端退出
+			if lenBuffer == 0 {
+				isQuit <- true
 			}
-			usersStr := strings.Join(users, "")
-			currentUser.SetUserMsg(usersStr)
-		} else if len(userInput) > 9 && userInput[:8] == "\\rename " {
-			newName := userInput[8:]
-			currentUser.SetUserName(newName)
-			// 再把成功更換的訊息寫回自己管道
-			currentUser.SetUserMsg("rename success!\n")
-		} else {
-			// 一般訊息
-			allMsg <- fmt.Sprintf("[%v:%v]:%v \n", currentUser.GetUserId(), currentUser.GetUserName(), userInput)
+			if err != nil {
+				fmt.Printf("conn.Read() err : %v\n", err)
+				return
+			}
+
+			// 打印 -1是因為 nc傳過來會有個換行
+			userInput := string(buffer[:lenBuffer-1])
+			// 輸入who列出當前所有在線使用者
+			if userInput == "\\who" {
+				var users []string
+				for _, user := range allUser {
+					users = append(users, fmt.Sprintf("userId:%v name:%v\n", user.GetUserId(), user.GetUserName()))
+				}
+				usersStr := strings.Join(users, "")
+				currentUser.SetUserMsg(usersStr)
+			} else if len(userInput) > 9 && userInput[:8] == "\\rename " {
+				newName := userInput[8:]
+				currentUser.SetUserName(newName)
+				// 再把成功更換的訊息寫回自己管道
+				currentUser.SetUserMsg("rename success!\n")
+			} else {
+				// 一般訊息
+				allMsg <- fmt.Sprintf("[%v:%v]:%v \n", currentUser.GetUserId(), currentUser.GetUserName(), userInput)
+			}
 		}
-	}
+	}()
 }
 
 // 監聽全局訊息管道
@@ -106,5 +120,18 @@ func listenAllMsg() {
 func writeToWindows(user *schema.User, conn net.Conn) {
 	for msg := range user.GetUserMsg() {
 		conn.Write([]byte(msg))
+	}
+}
+
+// 監聽用戶退出信號
+func listenIsQuit(isQuit chan bool, user *schema.User, conn net.Conn) {
+	defer fmt.Printf("%v 退出!", user.GetUserName())
+	for range isQuit {
+		// 發送退出訊息到全局訊息管道
+		allMsg <- fmt.Sprintf("%v is quit!\n", user.GetUserName())
+		// 從所有用戶map刪除
+		delete(allUser, user.GetUserId())
+		// 關掉連線
+		conn.Close()
 	}
 }
