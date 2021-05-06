@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net"
+	"strings"
 
 	schema "./schema"
 )
@@ -66,8 +67,19 @@ func handleConnection(conn net.Conn) {
 			return
 		}
 		// 打印 -1是因為 nc傳過來會有個換行
-		msgInfo := fmt.Sprintf("[%v:%v] %v \n", currentUser.GetUserId(), currentUser.GetUserName(), string(buffer[:len-1]))
-		allMsg <- msgInfo
+		// 輸入who列出當前所有在線使用者
+		switch string(buffer[:len-1]) {
+		case "who":
+			var users []string
+			for _, user := range allUser {
+				users = append(users, fmt.Sprintf("userId:%v name:%v", user.GetUserId(), user.GetUserName()))
+			}
+			usersStr := strings.Join(users, "\n")
+			currentUser.SetUserMsg(usersStr)
+		default:
+			allMsg <- fmt.Sprintf("[%v:%v]:%v \n", currentUser.GetUserId(), currentUser.GetUserName(), string(buffer[:len-1]))
+		}
+
 	}
 }
 
