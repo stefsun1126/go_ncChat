@@ -61,25 +61,30 @@ func handleConnection(conn net.Conn) {
 		// 用來接收獲取到的訊息
 		buffer := make([]byte, 2048)
 		// 讀取連接
-		len, err := conn.Read(buffer)
+		lenBuffer, err := conn.Read(buffer)
 		if err != nil {
 			fmt.Printf("conn.Read() err : %v\n", err)
 			return
 		}
 		// 打印 -1是因為 nc傳過來會有個換行
+		userInput := string(buffer[:lenBuffer-1])
 		// 輸入who列出當前所有在線使用者
-		switch string(buffer[:len-1]) {
-		case "who":
+		if userInput == "\\who" {
 			var users []string
 			for _, user := range allUser {
-				users = append(users, fmt.Sprintf("userId:%v name:%v", user.GetUserId(), user.GetUserName()))
+				users = append(users, fmt.Sprintf("userId:%v name:%v\n", user.GetUserId(), user.GetUserName()))
 			}
-			usersStr := strings.Join(users, "\n")
+			usersStr := strings.Join(users, "")
 			currentUser.SetUserMsg(usersStr)
-		default:
-			allMsg <- fmt.Sprintf("[%v:%v]:%v \n", currentUser.GetUserId(), currentUser.GetUserName(), string(buffer[:len-1]))
+		} else if len(userInput) > 9 && userInput[:8] == "\\rename " {
+			newName := userInput[8:]
+			currentUser.SetUserName(newName)
+			// 再把成功更換的訊息寫回自己管道
+			currentUser.SetUserMsg("rename success!\n")
+		} else {
+			// 一般訊息
+			allMsg <- fmt.Sprintf("[%v:%v]:%v \n", currentUser.GetUserId(), currentUser.GetUserName(), userInput)
 		}
-
 	}
 }
 

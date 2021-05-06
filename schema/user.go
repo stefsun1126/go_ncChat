@@ -35,3 +35,8 @@ func (u *User) GetUserMsg() chan string {
 func (u *User) SetUserMsg(msg string) {
 	u.msg <- msg
 }
+
+// 變更 user name
+func (u *User) SetUserName(name string) {
+	u.name = name
+}
