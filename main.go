@@ -4,10 +4,14 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	schema "./schema"
 )
+
+// 全局鎖
+var rw sync.RWMutex
 
 // 全局map紀錄所有用戶
 var allUser = make(map[string]*schema.User)
@@ -46,7 +50,9 @@ func handleConnection(conn net.Conn) {
 	currentUser := schema.NewUser(addr)
 
 	// 將此用戶加入所有用戶map
+	rw.Lock()
 	allUser[currentUser.GetUserId()] = currentUser
+	rw.Unlock()
 
 	// 退出信號管道
 	isQuit := make(chan bool)
@@ -83,9 +89,11 @@ func handleConnection(conn net.Conn) {
 		// 輸入who列出當前所有在線使用者
 		if userInput == "\\who" {
 			var users []string
+			rw.RLock()
 			for _, user := range allUser {
 				users = append(users, fmt.Sprintf("userId:%v name:%v\n", user.GetUserId(), user.GetUserName()))
 			}
+			rw.RUnlock()
 			usersStr := strings.Join(users, "")
 			currentUser.SetUserMsg(usersStr)
 		} else if len(userInput) > 9 && userInput[:8] == "\\rename " {
@@ -109,10 +117,12 @@ func listenAllMsg() {
 		info := <-allMsg
 
 		// 遍歷所有用戶 寫進用戶管道訊息
+		rw.RLock()
 		for _, user := range allUser {
 			// 這裡如果用無緩衝管道會阻塞在這，因為無緩衝管道需要讀寫同時
 			user.SetUserMsg(info)
 		}
+		rw.RUnlock()
 	}
 }
 
@@ -133,7 +143,9 @@ func listenIsQuit(isQuit, resetTimer chan bool, user *schema.User, conn net.Conn
 			// 發送退出訊息到全局訊息管道
 			allMsg <- fmt.Sprintf("%v is quit!\n", user.GetUserName())
 			// 從所有用戶map刪除
+			rw.Lock()
 			delete(allUser, user.GetUserId())
+			rw.Unlock()
 			// 關掉連線
 			conn.Close()
 			return
@@ -141,7 +153,9 @@ func listenIsQuit(isQuit, resetTimer chan bool, user *schema.User, conn net.Conn
 			// 發送退出訊息到全局訊息管道
 			allMsg <- fmt.Sprintf("%v is timeout!\n", user.GetUserName())
 			// 從所有用戶map刪除
+			rw.Lock()
 			delete(allUser, user.GetUserId())
+			rw.Unlock()
 			// 關掉連線
 			conn.Close()
 			return
@@ -150,12 +164,4 @@ func listenIsQuit(isQuit, resetTimer chan bool, user *schema.User, conn net.Conn
 		}
 	}
 
-	// for range isQuit {
-	// 	// 發送退出訊息到全局訊息管道
-	// 	allMsg <- fmt.Sprintf("%v is quit!\n", user.GetUserName())
-	// 	// 從所有用戶map刪除
-	// 	delete(allUser, user.GetUserId())
-	// 	// 關掉連線
-	// 	conn.Close()
-	// }
 }
